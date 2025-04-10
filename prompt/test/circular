@@ -1,0 +1,8 @@
+#self_ref
+这是一个循环引用测试: {{test.circular.self_ref}}
+
+#mutual_ref1
+引用了mutual_ref2: {{test.circular.mutual_ref2}}
+
+#mutual_ref2
+引用了mutual_ref1: {{test.circular.mutual_ref1}} 

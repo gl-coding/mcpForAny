@@ -1,0 +1,66 @@
+{
+    "test_cases": [
+        {
+            "name": "获取变量值",
+            "method": "get_value",
+            "args": ["test.vars.var1"],
+            "kwargs": {},
+            "expected": "这是一个测试变量"
+        },
+        {
+            "name": "写入新变量",
+            "method": "write_key_value",
+            "args": ["test.vars.new_var3", "这是通过测试用例添加的新变量"],
+            "kwargs": {},
+            "expected": true
+        },
+        {
+            "name": "获取所有有效键值对",
+            "method": "get_all_items",
+            "args": [],
+            "kwargs": {},
+            "expected": {
+                "test.vars.var1": "这是一个测试变量",
+                "test.vars.var2": "引用了var1的值: 这是一个测试变量",
+                "test.vars.new_var": "这是一个新添加的变量",
+                "test.vars.new_var2": "这是通过包装器添加的新变量",
+                "test.vars.new_var3": "这是通过测试用例添加的新变量",
+                "first.tt.first": "afeasdfasdfas"
+            }
+        },
+        {
+            "name": "获取所有无效键值对",
+            "method": "get_invalid_items",
+            "args": [],
+            "kwargs": {},
+            "expected": {
+                "test.vars.var3": "引用了不存在的变量: {{nonexist}}",
+                "test.bb.aa": "ddd\nccc\ntestddd\nccc\ntest{{test.bb.aa}}blockblock",
+                "test.circular.self_ref": "这是一个循环引用测试: 这是一个循环引用测试: {{test.circular.self_ref}}",
+                "test.circular.mutual_ref1": "引用了mutual_ref2: 引用了mutual_ref1: 引用了mutual_ref2: {{test.circular.mutual_ref2}}",
+                "test.circular.mutual_ref2": "引用了mutual_ref1: 引用了mutual_ref2: 引用了mutual_ref1: {{test.circular.mutual_ref1}}"
+            }
+        },
+        {
+            "name": "导出键值对到文件",
+            "method": "dump",
+            "args": ["test_output.txt", "test_invalid_output.txt"],
+            "kwargs": {},
+            "expected": true
+        },
+        {
+            "name": "测试不存在的变量",
+            "method": "get_value",
+            "args": ["test.vars.nonexist"],
+            "kwargs": {},
+            "expected": null
+        },
+        {
+            "name": "测试循环引用变量",
+            "method": "get_value",
+            "args": ["test.circular.self_ref"],
+            "kwargs": {},
+            "expected": null
+        }
+    ]
+} 

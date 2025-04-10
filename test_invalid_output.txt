@@ -1,0 +1,21 @@
+# 以下键值对包含无效的变量引用或循环引用:
+
+#test.vars.var3
+引用了不存在的变量: {{nonexist}}
+
+#test.bb.aa
+ddd
+ccc
+testddd
+ccc
+test{{test.bb.aa}}blockblock
+
+#test.circular.self_ref
+这是一个循环引用测试: 这是一个循环引用测试: {{test.circular.self_ref}}
+
+#test.circular.mutual_ref1
+引用了mutual_ref2: 引用了mutual_ref1: 引用了mutual_ref2: {{test.circular.mutual_ref2}}
+
+#test.circular.mutual_ref2
+引用了mutual_ref1: 引用了mutual_ref2: 引用了mutual_ref1: {{test.circular.mutual_ref1}}
+
