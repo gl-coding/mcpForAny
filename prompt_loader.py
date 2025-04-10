@@ -1,7 +1,4 @@
-import os
-import re
-import json
-import argparse
+import os, re, json, argparse
 from prompt_wrapper import Testable, PromptWrapper
 
 class PromptLoader(Testable):
@@ -272,8 +269,8 @@ class PromptLoader(Testable):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="PromptLoader 测试运行器")
-    parser.add_argument("--mode", choices=["test", "server"], default="test",
-                      help="运行模式：test（运行测试）或 server（启动服务器）")
+    parser.add_argument("--mode", choices=["test", "server", "wrapper_test"], default="test",
+                      help="运行模式：test（运行测试）或 server（启动服务器）或 wrapper_test（运行包装器测试）")
     parser.add_argument("--dir", default="prompt",
                       help="要处理的目录路径")
     parser.add_argument("--test-file", default="test_cases.json",
@@ -281,13 +278,15 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    # 创建 PromptLoader 实例
-    loader = PromptLoader(args.dir)
-    
     if args.mode == "test":
+        # 创建 PromptLoader 实例
+        loader = PromptLoader(args.dir)
         # 运行测试
         loader.run_tests(args.test_file)
+    elif args.mode == "wrapper_test":
+        # 运行包装器测试
+        PromptWrapper.run_tests()
     else:
         # 启动服务器
-        from prompt_wrapper import PromptWrapper
         PromptWrapper.start_server(PromptLoader, args.dir)
+
