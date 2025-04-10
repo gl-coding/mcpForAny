@@ -2,8 +2,9 @@ import os
 import re
 import json
 import argparse
+from prompt_wrapper import Testable, PromptWrapper
 
-class PromptLoader:
+class PromptLoader(Testable):
     def __init__(self, directory):
         """初始化PromptLoader
         
@@ -269,76 +270,6 @@ class PromptLoader:
             print(f"写入键值对时出错: {str(e)}")
             return False
 
-    def run_tests(self, test_cases_file="test_cases.json"):
-        """运行测试用例
-        
-        Args:
-            test_cases_file (str): 测试用例文件路径
-        """
-        print("\n开始运行测试用例...")
-        
-        # 加载测试用例
-        with open(test_cases_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            test_cases = data.get('test_cases', [])
-        
-        # 运行测试
-        results = []
-        for test_case in test_cases:
-            # 准备测试数据
-            method_name = test_case["method"]
-            args = test_case["args"]
-            kwargs = test_case["kwargs"]
-            expected = test_case["expected"]
-            
-            # 获取方法
-            method = getattr(self, method_name)
-            
-            # 调用方法
-            try:
-                result = method(*args, **kwargs)
-                passed = result == expected
-                error = None
-            except Exception as e:
-                result = None
-                passed = False
-                error = str(e)
-            
-            # 记录结果
-            test_result = {
-                "name": test_case["name"],
-                "method": method_name,
-                "args": args,
-                "kwargs": kwargs,
-                "expected": expected,
-                "actual": result,
-                "passed": passed,
-                "error": error
-            }
-            results.append(test_result)
-            
-            # 打印测试结果
-            print(f"\n测试: {test_result['name']}")
-            print(f"方法: {method_name}")
-            print(f"参数: args={args}, kwargs={kwargs}")
-            print(f"预期: {expected}")
-            print(f"实际: {result}")
-            print(f"状态: {'通过' if passed else '失败'}")
-            if error:
-                print(f"错误: {error}")
-            print("-" * 40)
-        
-        # 打印摘要
-        total = len(results)
-        passed = sum(1 for r in results if r["passed"])
-        failed = total - passed
-        
-        print("\n测试摘要:")
-        print(f"总测试数: {total}")
-        print(f"通过数: {passed}")
-        print(f"失败数: {failed}")
-        print(f"通过率: {passed/total*100:.2f}%")
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="PromptLoader 测试运行器")
     parser.add_argument("--mode", choices=["test", "server"], default="test",
@@ -359,5 +290,4 @@ if __name__ == "__main__":
     else:
         # 启动服务器
         from prompt_wrapper import PromptWrapper
-        wrapper = PromptWrapper(PromptLoader, args.dir)
-        wrapper.start_server()
+        PromptWrapper.start_server(PromptLoader, args.dir)

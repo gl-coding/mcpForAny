@@ -4,10 +4,188 @@ from sanic import Sanic
 from sanic.response import json
 import json as json_module
 import argparse
-from test_runner import TestRunner
+import requests
+from typing import Any, Dict, List
 
-# 创建 Sanic 应用实例
-app = Sanic("PromptWrapperServer")
+class Testable:
+    """可测试类的基类，提供测试功能"""
+    
+    def run_tests(self, test_cases_file="test_cases.json"):
+        """运行测试用例
+        
+        Args:
+            test_cases_file (str): 测试用例文件路径
+        """
+        print("\n开始运行测试用例...")
+        
+        # 加载测试用例
+        with open(test_cases_file, 'r', encoding='utf-8') as f:
+            data = json_module.load(f)
+            test_cases = data.get('test_cases', [])
+        
+        # 运行测试
+        results = []
+        for test_case in test_cases:
+            # 准备测试数据
+            method_name = test_case["method"]
+            args = test_case["args"]
+            kwargs = test_case["kwargs"]
+            expected = test_case["expected"]
+            
+            # 获取方法
+            method = getattr(self, method_name)
+            
+            # 调用方法
+            try:
+                result = method(*args, **kwargs)
+                passed = result == expected
+                error = None
+            except Exception as e:
+                result = None
+                passed = False
+                error = str(e)
+            
+            # 记录结果
+            test_result = {
+                "name": test_case["name"],
+                "method": method_name,
+                "args": args,
+                "kwargs": kwargs,
+                "expected": expected,
+                "actual": result,
+                "passed": passed,
+                "error": error
+            }
+            results.append(test_result)
+            
+            # 打印测试结果
+            print(f"\n测试: {test_result['name']}")
+            print(f"方法: {method_name}")
+            print(f"参数: args={args}, kwargs={kwargs}")
+            print(f"预期: {expected}")
+            print(f"实际: {result}")
+            print(f"状态: {'通过' if passed else '失败'}")
+            if error:
+                print(f"错误: {error}")
+            print("-" * 40)
+        
+        # 打印摘要
+        total = len(results)
+        passed = sum(1 for r in results if r["passed"])
+        failed = total - passed
+        
+        print("\n测试摘要:")
+        print(f"总测试数: {total}")
+        print(f"通过数: {passed}")
+        print(f"失败数: {failed}")
+        print(f"通过率: {passed/total*100:.2f}%")
+
+class TestRunner:
+    """测试运行器，用于执行测试用例"""
+    
+    def __init__(self, base_url: str = "http://localhost:8000"):
+        """初始化测试运行器
+        
+        Args:
+            base_url (str): MCP 服务器的基础 URL
+        """
+        self.base_url = base_url
+        self.mcp_url = f"{base_url}/mcp"
+    
+    def load_test_cases(self, file_path: str) -> List[Dict[str, Any]]:
+        """加载测试用例
+        
+        Args:
+            file_path (str): 测试用例文件路径
+            
+        Returns:
+            List[Dict[str, Any]]: 测试用例列表
+        """
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json_module.load(f)
+            return data.get('test_cases', [])
+    
+    def run_test_case(self, test_case: Dict[str, Any]) -> Dict[str, Any]:
+        """运行单个测试用例
+        
+        Args:
+            test_case (Dict[str, Any]): 测试用例
+            
+        Returns:
+            Dict[str, Any]: 测试结果
+        """
+        # 准备请求数据
+        request_data = {
+            "method": test_case["method"],
+            "args": test_case["args"],
+            "kwargs": test_case["kwargs"]
+        }
+        
+        # 发送请求
+        response = requests.post(self.mcp_url, json=request_data)
+        result = response.json()
+        
+        # 检查结果
+        success = result["success"]
+        actual = result.get("result")
+        expected = test_case["expected"]
+        
+        # 比较结果
+        passed = actual == expected
+        
+        return {
+            "name": test_case["name"],
+            "method": test_case["method"],
+            "args": test_case["args"],
+            "kwargs": test_case["kwargs"],
+            "expected": expected,
+            "actual": actual,
+            "passed": passed,
+            "error": None if success else result.get("error")
+        }
+    
+    def run_all_tests(self, test_cases: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """运行所有测试用例
+        
+        Args:
+            test_cases (List[Dict[str, Any]]): 测试用例列表
+            
+        Returns:
+            List[Dict[str, Any]]: 测试结果列表
+        """
+        results = []
+        for test_case in test_cases:
+            result = self.run_test_case(test_case)
+            results.append(result)
+            
+            # 打印测试结果
+            print(f"\n测试: {result['name']}")
+            print(f"方法: {result['method']}")
+            print(f"参数: args={result['args']}, kwargs={result['kwargs']}")
+            print(f"预期: {result['expected']}")
+            print(f"实际: {result['actual']}")
+            print(f"状态: {'通过' if result['passed'] else '失败'}")
+            if result['error']:
+                print(f"错误: {result['error']}")
+            print("-" * 40)
+        
+        return results
+    
+    def print_summary(self, results: List[Dict[str, Any]]):
+        """打印测试摘要
+        
+        Args:
+            results (List[Dict[str, Any]]): 测试结果列表
+        """
+        total = len(results)
+        passed = sum(1 for r in results if r["passed"])
+        failed = total - passed
+        
+        print("\n测试摘要:")
+        print(f"总测试数: {total}")
+        print(f"通过数: {passed}")
+        print(f"失败数: {failed}")
+        print(f"通过率: {passed/total*100:.2f}%")
 
 class PromptWrapper:
     """PromptLoader的包装器类，通过反射机制暴露和调用被包装类的方法"""
@@ -22,7 +200,6 @@ class PromptWrapper:
         """
         self._wrapped_instance = wrapped_class(*args, **kwargs)
         self._expose_methods()
-        self._setup_routes()
     
     def _expose_methods(self):
         """通过反射暴露被包装类的公共方法"""
@@ -47,10 +224,12 @@ class PromptWrapper:
         else:
             setattr(self._wrapped_instance, name, value)
     
-    def _setup_routes(self):
-        """设置 Sanic 路由"""
-        # MCP 路由已经在 _expose_methods 中设置了公共方法
+    def setup_routes(self, app):
+        """设置 Sanic 路由
         
+        Args:
+            app: Sanic 应用实例
+        """
         # 添加 MCP 路由
         @app.route("/mcp", methods=["POST"])
         async def handle_mcp(request):
@@ -111,47 +290,62 @@ class PromptWrapper:
                 "methods": methods_info
             })
 
-def run_tests():
-    """运行测试用例"""
-    print("\n开始运行测试用例...")
-    runner = TestRunner()
-    test_cases = runner.load_test_cases("test_cases.json")
-    results = runner.run_all_tests(test_cases)
-    runner.print_summary(results)
+    @classmethod
+    def run_tests(cls):
+        """运行测试用例"""
+        print("\n开始运行测试用例...")
+        runner = TestRunner()
+        test_cases = runner.load_test_cases("test_cases.json")
+        results = runner.run_all_tests(test_cases)
+        runner.print_summary(results)
 
-def start_server():
-    """启动 MCP 服务器"""
-    from prompt_loader import PromptLoader
-    
-    # 创建包装器实例
-    wrapper = PromptWrapper(PromptLoader, "prompt")
-    
-    # 启动 MCP 服务器
-    print("\n启动 MCP 服务器...")
-    print("服务器地址: http://0.0.0.0:8000")
-    print("\n可用的 API 端点:")
-    print("1. GET /methods - 获取所有可用方法的信息")
-    print("2. POST /mcp - 调用方法")
-    print("\nPOST /mcp 请求示例:")
-    print('''
-    {
-        "method": "get_value",
-        "args": ["test.vars.var1"],
-        "kwargs": {}
-    }
-    ''')
-    
-    # 启动服务器
-    app.run(host="0.0.0.0", port=8000, single_process=True)
+    @classmethod
+    def start_server(cls, wrapped_class, *args, **kwargs):
+        """启动 MCP 服务器
+        
+        Args:
+            wrapped_class: 要包装的类
+            *args: 传递给被包装类构造函数的参数
+            **kwargs: 传递给被包装类构造函数的关键字参数
+        """
+        # 创建 Sanic 应用实例
+        app = Sanic("PromptWrapperServer")
+        
+        # 创建包装器实例
+        wrapper = cls(wrapped_class, *args, **kwargs)
+        
+        # 设置路由
+        wrapper.setup_routes(app)
+        
+        # 启动 MCP 服务器
+        print("\n启动 MCP 服务器...")
+        print("服务器地址: http://0.0.0.0:8000")
+        print("\n可用的 API 端点:")
+        print("1. GET /methods - 获取所有可用方法的信息")
+        print("2. POST /mcp - 调用方法")
+        print("\nPOST /mcp 请求示例:")
+        print('''
+        {
+            "method": "get_value",
+            "args": ["test.vars.var1"],
+            "kwargs": {}
+        }
+        ''')
+        
+        # 启动服务器
+        app.run(host="0.0.0.0", port=8000, single_process=True)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="PromptWrapper 服务器和测试运行器")
     parser.add_argument("--mode", choices=["server", "test"], default="server",
                       help="运行模式：server（启动服务器）或 test（运行测试）")
+    parser.add_argument("--dir", default="prompt",
+                      help="要处理的目录路径")
     
     args = parser.parse_args()
     
     if args.mode == "test":
-        run_tests()
+        PromptWrapper.run_tests()
     else:
-        start_server() 
+        from prompt_loader import PromptLoader
+        PromptWrapper.start_server(PromptLoader, args.dir) 
