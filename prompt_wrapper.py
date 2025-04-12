@@ -143,6 +143,39 @@ class TestRunner:
             "passed": passed,
             "error": None if success else result.get("error")
         }
+
+    def call_method(self, args_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """通用函数调用
+        
+        Args:
+            args_dict (Dict[str, Any]): 函数参数
+            
+        Returns:
+            Dict[str, Any]: 函数结果
+        """
+        # 准备请求数据
+        request_data = {
+            "method": args_dict["method"],
+            "args": args_dict["args"],
+            "kwargs": args_dict["kwargs"]
+        }
+        
+        # 发送请求
+        response = requests.post(self.mcp_url, json=request_data)
+        result = response.json()
+        
+        # 检查结果
+        success = result["success"]
+        actual = result.get("result")
+
+        return {
+            "name": args_dict["name"],
+            "method": args_dict["method"],
+            "args": args_dict["args"],
+            "kwargs": args_dict["kwargs"],
+            "actual": actual,
+            "error": None if success else result.get("error")
+        }
     
     def run_all_tests(self, test_cases: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """运行所有测试用例
@@ -335,17 +368,72 @@ class PromptWrapper:
         # 启动服务器
         app.run(host="0.0.0.0", port=8000, single_process=True)
 
+    @classmethod
+    def generate_config(cls, test_file: str = "test_cases.json", output_file: str = "config.json"):
+        """读取测试用例文件，提取可调用的函数并生成配置文件
+        
+        Args:
+            test_file (str): 测试用例文件路径
+            output_file (str): 输出配置文件路径
+        """
+        print("\n开始生成配置文件...")
+        
+        try:
+            # 读取测试用例文件
+            with open(test_file, 'r', encoding='utf-8') as f:
+                data = json_module.load(f)
+                test_cases = data.get('test_cases', [])
+            
+            # 提取所有方法名和参数信息
+            methods_info = {}
+            for test_case in test_cases:
+                method = test_case.get("method")
+                if method:
+                    if method not in methods_info:
+                        methods_info[method] = {
+                            "args": test_case.get("args", []),
+                            "kwargs": test_case.get("kwargs", {}),
+                            "description": f"方法 {method} 的测试用例"
+                        }
+            
+            # 创建配置文件内容
+            config = {
+                "methods": {
+                    method: info for method, info in sorted(methods_info.items())
+                },
+                "description": "可用的方法列表及其参数信息，从测试用例中提取"
+            }
+            
+            # 写入配置文件
+            with open(output_file, 'w', encoding='utf-8') as f:
+                json_module.dump(config, f, ensure_ascii=False, indent=4)
+            
+            print(f"成功生成配置文件: {output_file}")
+            print(f"共提取 {len(methods_info)} 个方法")
+            print("方法列表及其参数:")
+            for method, info in sorted(methods_info.items()):
+                print(f"\n方法: {method}")
+                print(f"位置参数: {info['args']}")
+                print(f"关键字参数: {info['kwargs']}")
+                
+        except Exception as e:
+            print(f"生成配置文件时出错: {str(e)}")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="PromptWrapper 服务器和测试运行器")
-    parser.add_argument("--mode", choices=["server", "test"], default="server",
-                      help="运行模式：server（启动服务器）或 test（运行测试）")
-    parser.add_argument("--dir", default="prompt",
-                      help="要处理的目录路径")
+    parser.add_argument("--mode", choices=["server", "test", "generate_config"], default="server",
+                      help="运行模式：server（启动服务器）或 test（运行测试）或 generate_config（生成配置文件）")
+    parser.add_argument("--test-file", default="test_cases.json",
+                      help="测试用例文件路径")
+    parser.add_argument("--output-file", default="config.json",
+                      help="输出配置文件路径")
     
     args = parser.parse_args()
     
     if args.mode == "test":
         PromptWrapper.run_tests()
+    elif args.mode == "generate_config":
+        PromptWrapper.generate_config(args.test_file, args.output_file)
     else:
         from prompt_loader import PromptLoader
-        PromptWrapper.start_server(PromptLoader, args.dir) 
+        PromptWrapper.start_server(PromptLoader, "prompt") 
