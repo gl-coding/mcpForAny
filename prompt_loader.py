@@ -269,12 +269,14 @@ class PromptLoader(Testable):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="PromptLoader 测试运行器")
-    parser.add_argument("--mode", choices=["test", "server", "wrapper_test"], default="test",
-                      help="运行模式：test（运行测试）或 server（启动服务器）或 wrapper_test（运行包装器测试）")
+    parser.add_argument("--mode", choices=["test", "server", "wrapper_test", "generate_config"], default="test",
+                      help="运行模式：test（运行测试）或 server（启动服务器）或 wrapper_test（运行包装器测试）或 generate_config（生成配置文件）")
     parser.add_argument("--dir", default="prompt",
                       help="要处理的目录路径")
     parser.add_argument("--test-file", default="test_cases.json",
                       help="测试用例文件路径")
+    parser.add_argument("--output-file", default="config.json",
+                      help="输出配置文件路径")
     
     args = parser.parse_args()
     
@@ -286,6 +288,9 @@ if __name__ == "__main__":
     elif args.mode == "wrapper_test":
         # 运行包装器测试
         PromptWrapper.run_tests()
+    elif args.mode == "generate_config":
+        # 生成配置文件
+        PromptWrapper.generate_config(args.test_file, args.output_file)
     else:
         # 启动服务器
         PromptWrapper.start_server(PromptLoader, args.dir)
