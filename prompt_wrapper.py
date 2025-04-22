@@ -7,6 +7,62 @@ import argparse
 import requests
 from typing import Any, Dict, List
 
+class ServerConfig:
+    """服务器配置类"""
+    
+    # 默认配置
+    HOST = "0.0.0.0"
+    _PORT = 8000  # 使用私有变量存储端口
+    
+    @classmethod
+    def get_port(cls) -> int:
+        """获取当前端口号
+        
+        Returns:
+            int: 当前端口号
+        """
+        return cls._PORT
+    
+    @classmethod
+    def set_port(cls, port: int):
+        """设置端口号
+        
+        Args:
+            port (int): 要设置的端口号
+        """
+        if not isinstance(port, int):
+            raise TypeError("端口号必须是整数")
+        if port < 1 or port > 65535:
+            raise ValueError("端口号必须在 1-65535 之间")
+        cls._PORT = port
+    
+    @classmethod
+    def get_server_url(cls) -> str:
+        """获取服务器URL
+        
+        Returns:
+            str: 服务器完整URL
+        """
+        return f"http://{cls.HOST}:{cls._PORT}"
+    
+    @classmethod
+    def get_mcp_url(cls) -> str:
+        """获取MCP接口URL
+        
+        Returns:
+            str: MCP接口完整URL
+        """
+        return f"{cls.get_server_url()}/mcp"
+    
+    @classmethod
+    def get_methods_url(cls) -> str:
+        """获取methods接口URL
+        
+        Returns:
+            str: methods接口完整URL
+        """
+        return f"{cls.get_server_url()}/methods"
+
 class Testable:
     """可测试类的基类，提供测试功能"""
     
@@ -83,7 +139,7 @@ class Testable:
 class TestRunner:
     """测试运行器，用于执行测试用例"""
     
-    def __init__(self, base_url: str = "http://localhost:8000"):
+    def __init__(self, base_url: str = ServerConfig.get_server_url()):
         """初始化测试运行器
         
         Args:
@@ -352,7 +408,7 @@ class PromptWrapper:
         
         # 启动 MCP 服务器
         print("\n启动 MCP 服务器...")
-        print("服务器地址: http://0.0.0.0:8000")
+        print(f"服务器地址: {ServerConfig.get_server_url()}")
         print("\n可用的 API 端点:")
         print("1. GET /methods - 获取所有可用方法的信息")
         print("2. POST /mcp - 调用方法")
@@ -366,15 +422,16 @@ class PromptWrapper:
         ''')
         
         # 启动服务器
-        app.run(host="0.0.0.0", port=8000, single_process=True)
+        app.run(host=ServerConfig.HOST, port=ServerConfig.get_port(), single_process=True)
 
     @classmethod
-    def generate_config(cls, test_file: str = "test_cases.json", output_file: str = "config.json"):
+    def generate_config(cls, test_file: str = "test_cases.json", output_file: str = "config.json", server_url: str = ServerConfig.get_server_url()):
         """读取测试用例文件，提取可调用的函数并生成配置文件
         
         Args:
             test_file (str): 测试用例文件路径
             output_file (str): 输出配置文件路径
+            server_url (str): 服务器地址
         """
         print("\n开始生成配置文件...")
         
@@ -398,6 +455,11 @@ class PromptWrapper:
             
             # 创建配置文件内容
             config = {
+                "server": {
+                    "url": server_url,
+                    "mcp_endpoint": f"{server_url}/mcp",
+                    "methods_endpoint": f"{server_url}/methods"
+                },
                 "methods": {
                     method: info for method, info in sorted(methods_info.items())
                 },
@@ -409,6 +471,7 @@ class PromptWrapper:
                 json_module.dump(config, f, ensure_ascii=False, indent=4)
             
             print(f"成功生成配置文件: {output_file}")
+            print(f"服务器地址: {server_url}")
             print(f"共提取 {len(methods_info)} 个方法")
             print("方法列表及其参数:")
             for method, info in sorted(methods_info.items()):
@@ -427,13 +490,21 @@ if __name__ == "__main__":
                       help="测试用例文件路径")
     parser.add_argument("--output-file", default="config.json",
                       help="输出配置文件路径")
+    parser.add_argument("--server-url", default=ServerConfig.get_server_url(),
+                      help="服务器地址")
+    parser.add_argument("--port", type=int, default=ServerConfig.get_port(),
+                      help="服务器端口号")
     
     args = parser.parse_args()
+    
+    # 设置端口
+    if args.port != ServerConfig.get_port():
+        ServerConfig.set_port(args.port)
     
     if args.mode == "test":
         PromptWrapper.run_tests()
     elif args.mode == "generate_config":
-        PromptWrapper.generate_config(args.test_file, args.output_file)
+        PromptWrapper.generate_config(args.test_file, args.output_file, ServerConfig.get_server_url())
     else:
         from prompt_loader import PromptLoader
         PromptWrapper.start_server(PromptLoader, "prompt") 
