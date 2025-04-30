@@ -1,24 +1,93 @@
 import os, re, json, argparse
-from prompt_wrapper import Testable, PromptWrapper
+import logging
+from datetime import datetime
 
-class PromptLoader(Testable):
-    def __init__(self, directory):
+class PromptLoader:
+    def __init__(self, directory, log_file=None):
         """初始化PromptLoader
         
         Args:
             directory (str): 要遍历的目录路径
+            log_file (str, optional): 日志文件路径，如果不指定则自动生成
         """
+        self.logger = self._setup_logger(log_file)
         self.key_value_store = {}
         self.valid_items = {}  # 存储有效的键值对
         self.invalid_items = {}  # 存储无效的键值对
         self.base_directory = directory  # 保存基础目录路径
-        if os.path.exists(directory):
-            print(f"开始处理目录: {directory}")
-            self._traverse_directory(directory)
-            # 初始化后立即处理变量替换
-            self._process_variables()
-        else:
-            print(f"目录 {directory} 不存在")
+        self.load_directory(directory)
+
+    def _setup_logger(self, log_file=None):
+        """设置日志记录器
+        
+        Args:
+            log_file (str, optional): 日志文件路径，如果不指定则自动生成
+            
+        Returns:
+            logging.Logger: 配置好的日志记录器
+        """
+        if log_file is None:
+            # 如果未指定日志文件，则在当前目录下创建logs目录并生成日志文件
+            log_dir = "logs"
+            os.makedirs(log_dir, exist_ok=True)
+            log_file = os.path.join(log_dir, f"prompt_loader_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+        
+        # 创建日志记录器
+        logger = logging.getLogger('PromptLoader')
+        logger.setLevel(logging.INFO)
+        
+        # 防止重复添加处理器
+        if not logger.handlers:
+            # 创建文件处理器
+            file_handler = logging.FileHandler(log_file, encoding='utf-8')
+            file_handler.setLevel(logging.INFO)
+            
+            # 创建控制台处理器
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(logging.INFO)
+            
+            # 创建格式化器
+            formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
+            file_handler.setFormatter(formatter)
+            console_handler.setFormatter(formatter)
+            
+            # 添加处理器到日志记录器
+            logger.addHandler(file_handler)
+            logger.addHandler(console_handler)
+        
+        logger.info(f"日志系统初始化完成，日志文件：{log_file}")
+        return logger
+
+    def load_directory(self, directory):
+        """加载指定目录下的所有键值对
+        
+        Args:
+            directory (str): 要遍历的目录路径
+            
+        Returns:
+            bool: 加载是否成功
+        """
+        try:
+            # 清空现有数据
+            self.key_value_store.clear()
+            self.valid_items.clear()
+            self.invalid_items.clear()
+            
+            # 更新基础目录
+            self.base_directory = directory
+            
+            if os.path.exists(directory):
+                self.logger.info(f"开始处理目录: {directory}")
+                self._traverse_directory(directory)
+                # 处理变量替换
+                self._process_variables()
+                return True
+            else:
+                self.logger.error(f"目录 {directory} 不存在")
+                return False
+        except Exception as e:
+            self.logger.error(f"加载目录时出错: {str(e)}")
+            return False
 
     def _parse_key_value_pairs(self, content):
         """解析文件内容中的键值对"""
@@ -44,19 +113,19 @@ class PromptLoader(Testable):
                 if pairs:
                     # 获取相对于base_dir的路径，并将路径分隔符替换为.
                     rel_path = os.path.relpath(file_path, base_dir).replace('/', '.')
-                    print(f"\n文件: {file_path}")
+                    self.logger.info(f"\n文件: {file_path}")
                     for key, value in pairs:
                         # 在键名前面添加相对路径作为前缀，使用.作为分隔符
                         prefixed_key = f"{rel_path}.{key}"
                         # 将键值对存储到字典中
                         self.key_value_store[prefixed_key] = value.strip()
-                        print(f"键: {prefixed_key}")
-                        print(f"值: {value.strip()}")
-                        print("-" * 40)
+                        self.logger.info(f"键: {prefixed_key}")
+                        self.logger.info(f"值: {value.strip()}")
+                        self.logger.info("-" * 40)
         except ValueError as e:
-            print(f"错误: {str(e)}")
+            self.logger.error(f"错误: {str(e)}")
         except Exception as e:
-            print(f"处理文件 {file_path} 时出错: {str(e)}")
+            self.logger.error(f"处理文件 {file_path} 时出错: {str(e)}")
 
     def _traverse_directory(self, directory):
         """遍历目录及其子目录"""
@@ -128,16 +197,16 @@ class PromptLoader(Testable):
         
         # 打印未找到的变量
         if missing_vars:
-            print("\n警告: 以下变量未找到对应的值:")
+            self.logger.warning("\n警告: 以下变量未找到对应的值:")
             for var in sorted(missing_vars):
-                print(f"- {var}")
+                self.logger.warning(f"- {var}")
                 
         # 打印循环引用
         if circular_refs:
-            print("\n警告: 检测到循环引用:")
+            self.logger.warning("\n警告: 检测到循环引用:")
             for cycle in sorted(circular_refs):
                 cycle_str = " -> ".join(cycle)
-                print(f"- 循环引用链: {cycle_str}")
+                self.logger.warning(f"- 循环引用链: {cycle_str}")
 
     def get_value(self, key):
         """通过键名查询对应的值
@@ -181,7 +250,7 @@ class PromptLoader(Testable):
             with open(output_file, 'w', encoding='utf-8') as f:
                 for key, value in self.valid_items.items():
                     f.write(f"#{key}\n{value}\n\n")
-            print(f"成功将有效键值对写入文件: {output_file}")
+            self.logger.info(f"成功将有效键值对写入文件: {output_file}")
             
             # 如果有无效的键值对，写入到另一个文件
             if self.invalid_items and invalid_output_file:
@@ -189,12 +258,12 @@ class PromptLoader(Testable):
                     f.write("# 以下键值对包含无效的变量引用或循环引用:\n\n")
                     for key, value in self.invalid_items.items():
                         f.write(f"#{key}\n{value}\n\n")
-                print(f"成功将无效键值对写入文件: {invalid_output_file}")
+                self.logger.info(f"成功将无效键值对写入文件: {invalid_output_file}")
             
             return True
             
         except Exception as e:
-            print(f"写入文件时出错: {str(e)}")
+            self.logger.error(f"写入文件时出错: {str(e)}")
             return False
 
     def write_key_value(self, key, value):
@@ -254,7 +323,7 @@ class PromptLoader(Testable):
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(new_content)
             
-            print(f"成功将键值对写入文件: {file_path}")
+            self.logger.info(f"成功将键值对写入文件: {file_path}")
             
             # 更新键值对存储
             self.key_value_store[key] = value
@@ -264,34 +333,11 @@ class PromptLoader(Testable):
             return True
             
         except Exception as e:
-            print(f"写入键值对时出错: {str(e)}")
+            self.logger.error(f"写入键值对时出错: {str(e)}")
             return False
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="PromptLoader 测试运行器")
-    parser.add_argument("--mode", choices=["test", "server", "wrapper_test", "generate_config"], default="test",
-                      help="运行模式：test（运行测试）或 server（启动服务器）或 wrapper_test（运行包装器测试）或 generate_config（生成配置文件）")
-    parser.add_argument("--dir", default="prompt",
-                      help="要处理的目录路径")
-    parser.add_argument("--test-file", default="test_cases.json",
-                      help="测试用例文件路径")
-    parser.add_argument("--output-file", default="config.json",
-                      help="输出配置文件路径")
-    
-    args = parser.parse_args()
-    
-    if args.mode == "test":
-        # 创建 PromptLoader 实例
-        loader = PromptLoader(args.dir)
-        # 运行测试
-        loader.run_tests(args.test_file)
-    elif args.mode == "wrapper_test":
-        # 运行包装器测试
-        PromptWrapper.run_tests()
-    elif args.mode == "generate_config":
-        # 生成配置文件
-        PromptWrapper.generate_config(args.test_file, args.output_file)
-    else:
-        # 启动服务器
-        PromptWrapper.start_server(PromptLoader, args.dir)
-
+    # 使用示例
+    loader = PromptLoader("prompt")  # 会自动创建日志文件
+    # 或者指定日志文件
+    # loader = PromptLoader("prompt", log_file="my_custom_log.log")
